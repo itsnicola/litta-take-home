@@ -1,0 +1,24 @@
+services:
+  api:
+    build:
+      context: ./API
+      dockerfile: Dockerfile
+      target: dev
+    container_name: api
+    ports:
+      - "3000:3000"
+    environment:
+      PORT: 3000
+    develop:
+      watch:
+        - action: sync
+          path: ./API/src
+          target: /app/src
+        - action: sync+restart
+          path: ./API/tsconfig.json
+          target: /app/tsconfig.json
+        - action: rebuild
+          path: ./API/package.json
+        - action: rebuild
+          path: ./API/package-lock.json
+    restart: always
