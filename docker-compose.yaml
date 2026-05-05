@@ -1,4 +1,5 @@
 services:
+
   api:
     build:
       context: ./API
@@ -22,3 +23,17 @@ services:
         - action: rebuild
           path: ./API/package-lock.json
     restart: always
+
+
+  db:
+    image: postgres:15
+    container_name: DB
+    restart: always
+    environment:
+      POSTGRES_USER: user
+      POSTGRES_PASSWORD: password
+      POSTGRES_DB: mydb
+    ports:
+      - "5432:5432"
+    volumes:
+      - ./DB/init.sql:/docker-entrypoint-initdb.d/init.sql
