@@ -8,10 +8,10 @@ export type CatalogueCategory =
   | 'garden'
 
 export interface CatalogueItem {
-  id: number | string
-  name?: string
-  category?: CatalogueCategory
-  [key: string]: unknown
+  id: number
+  displayName: string
+  category: CatalogueCategory
+  baseFee: number
 }
 
 
@@ -34,12 +34,11 @@ export async function loadCatalogue(): Promise<CatalogueItem[]> {
         return [];
     }
 }
-function mapCatalogueItem(row: Record<string, unknown>): CatalogueItem {
+function mapCatalogueItem(row: Record<string, any>): CatalogueItem {
     return {
-        id: row.id as number | string,
-        name: row.name as string | undefined,
-        display_name: row.display_name,
-        category: row.category as CatalogueCategory | undefined,
-        base_fee: row.base_fee,
+        id: row.id as number,
+        displayName: row.display_name,
+        category: row.category as CatalogueCategory,
+        baseFee: row.base_fee,
     };
 }

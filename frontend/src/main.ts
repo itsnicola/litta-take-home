@@ -1,4 +1,10 @@
-import { createApp } from 'vue'
-import App from './App.vue'
+  import { createApp } from 'vue'
+  import { createBootstrap } from 'bootstrap-vue-next'
+  import App from './App.vue'
 
-createApp(App).mount('#app')
+  import 'bootstrap/dist/css/bootstrap.css'
+  import 'bootstrap-vue-next/dist/bootstrap-vue-next.css'
+
+  createApp(App)
+    .use(createBootstrap())
+    .mount('#app')

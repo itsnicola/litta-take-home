@@ -1,13 +1,35 @@
 <script setup lang="ts">
-import { onMounted, ref } from 'vue'
+import { computed, onMounted, ref } from 'vue'
+import { BDropdown, BDropdownItemButton, BDropdownText } from 'bootstrap-vue-next'
 import { type CatalogueItem, loadCatalogue } from './services/catalogueService'
 
 const navItems = ['Services', 'About', 'Contact']
 const catalogueItems = ref<CatalogueItem[]>([])
+const selectedItem = ref<CatalogueItem | null>(null)
+
+const groupedCatalogueItems = computed(() => {
+  const groupedItems = new Map<string, CatalogueItem[]>()
+
+  for (const item of catalogueItems.value) {
+    const itemsInCategory = groupedItems.get(item.category) ?? []
+    itemsInCategory.push(item)
+    groupedItems.set(item.category, itemsInCategory)
+  }
+
+  return Array.from(groupedItems.entries()).map(([category, items]) => ({
+    category,
+    label: formatCategoryLabel(category),
+    items: [...items].sort((left, right) => left.displayName.localeCompare(right.displayName)),
+  }))
+})
 
 onMounted(async () => {
   catalogueItems.value = await loadCatalogue()
 })
+
+function formatCategoryLabel(category: string) {
+  return category.charAt(0).toUpperCase() + category.slice(1)
+}
 </script>
 
 <template>
@@ -72,18 +94,32 @@ onMounted(async () => {
         </p> -->
 
         <form class="booking-form">
-          <label> 
+          <label>
             <span>I need to get rid of a:</span>
-            <select>
-              <option selected disabled>Select an item type</option>
-              <option
-                v-for="item in catalogueItems"
-                :key="item.id"
-                :value="item.category"
+            <BDropdown
+              id="item-dropdown"
+              variant="light"
+              boundary="viewport"
+              class="item-dropdown"
+              :text="selectedItem?.displayName ?? 'Select an item type'"
+            >
+              <template
+                v-for="group in groupedCatalogueItems"
+                :key="group.category"
               >
-                {{ item.category }}
-              </option>
-            </select>
+                <BDropdownText class="item-dropdown__category">
+                  {{ group.label }}
+                </BDropdownText>
+
+                <BDropdownItemButton
+                  v-for="item in group.items"
+                  :key="item.id"
+                  @click="selectedItem = item"
+                >
+                  {{ item.displayName }}
+                </BDropdownItemButton>
+              </template>
+            </BDropdown>
           </label>
 
           <label>
@@ -347,6 +383,41 @@ onMounted(async () => {
   color: #f8f4ed;
   background: linear-gradient(135deg, #1f2a24 0%, #31473d 100%);
   cursor: pointer;
+}
+
+.item-dropdown {
+  width: 100%;
+}
+
+.item-dropdown :deep(button) {
+  width: 100%;
+  padding: 14px 16px;
+  font: inherit;
+  color: #1f2a24;
+  background: #fffdfa;
+  text-align: left;
+}
+
+.item-dropdown :deep(button.dropdown-toggle) {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  border: 1px solid rgba(63, 82, 72, 0.14);
+  border-radius: 18px;
+}
+
+.item-dropdown :deep(button.dropdown-toggle:focus) {
+  border-color: #6f8d7e;
+  box-shadow: 0 0 0 4px rgba(111, 141, 126, 0.14);
+}
+
+.item-dropdown :deep(.item-dropdown__category) {
+  padding: 12px 16px 6px;
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #567465;
 }
 
 @media (max-width: 960px) {
