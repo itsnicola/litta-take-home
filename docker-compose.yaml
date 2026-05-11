@@ -1,4 +1,44 @@
 services:
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: frontend
+    ports:
+      - "5173:5173"
+    depends_on:
+      - api
+    develop:
+      watch:
+        - action: sync
+          path: ./frontend/src
+          target: /app/src
+        - action: sync
+          path: ./frontend/public
+          target: /app/public
+        - action: sync+restart
+          path: ./frontend/index.html
+          target: /app/index.html
+        - action: sync+restart
+          path: ./frontend/vite.config.ts
+          target: /app/vite.config.ts
+        - action: sync+restart
+          path: ./frontend/tsconfig.json
+          target: /app/tsconfig.json
+        - action: sync+restart
+          path: ./frontend/tsconfig.app.json
+          target: /app/tsconfig.app.json
+        - action: sync+restart
+          path: ./frontend/tsconfig.node.json
+          target: /app/tsconfig.node.json
+        - action: sync+restart
+          path: ./frontend/env.d.ts
+          target: /app/env.d.ts
+        - action: rebuild
+          path: ./frontend/package.json
+        - action: rebuild
+          path: ./frontend/package-lock.json
+    restart: always
 
   api:
     build:
