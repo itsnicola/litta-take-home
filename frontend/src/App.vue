@@ -6,6 +6,8 @@ import { type CatalogueItem, loadCatalogue } from './services/catalogueService'
 const navItems = ['Services', 'About', 'Contact']
 const catalogueItems = ref<CatalogueItem[]>([])
 const selectedItem = ref<CatalogueItem | null>(null)
+const quantity = ref(1)
+const postcode = ref('')
 
 const groupedCatalogueItems = computed(() => {
   const groupedItems = new Map<string, CatalogueItem[]>()
@@ -30,6 +32,17 @@ onMounted(async () => {
 function formatCategoryLabel(category: string) {
   return category.charAt(0).toUpperCase() + category.slice(1)
 }
+
+const estimatedQuote = computed(() => {
+  if (!selectedItem.value) return null
+  return selectedItem.value.baseFee * Math.max(quantity.value, 1)
+})
+
+const quoteSummary = computed(() => {
+  if (!selectedItem.value) return 'Choose an item and quantity to see your quote.'
+  const itemLabel = quantity.value === 1 ? selectedItem.value.displayName : `${selectedItem.value.displayName}s`
+  return `Estimated quote for ${quantity.value} ${itemLabel}`
+})
 </script>
 
 <template>
@@ -39,7 +52,7 @@ function formatCategoryLabel(category: string) {
         <span class="brand-mark">LT</span>
         <div>
           <p class="eyebrow">Litta</p>
-          <p class="brand-name">Home Collection</p> <!-- TODO: replace with logo-->
+          <p class="brand-name">Home Collection</p>
         </div>
       </div>
 
@@ -54,104 +67,81 @@ function formatCategoryLabel(category: string) {
       </nav>
     </header>
 
-    <main class="hero-layout">
-      <section class="hero-copy">
-        <p class="hero-kicker">Book a fast, reliable collection</p>
-        <h1>Clear your space without the back-and-forth.</h1>
-        <p class="hero-text">
-          A streamlined booking flow for waste collection, bulky item pickup, and
-          home clearances. Choose a date, tell us what needs collecting, and we
-          handle the rest.
-        </p>
+    <main class="form-stage">
+      <section class="quote-form-panel" aria-labelledby="quote-form-title">
+        <div class="form-copy">
+          <p class="section-kicker">Quick estimate</p>
+          <h1 id="quote-form-title">Tell us what needs to go.</h1>
+          <p class="form-copy__text">Choose an item, set the quantity, and get an instant feel for the price.</p>
+        </div>
 
-        <div class="hero-points">
-          <div>
-            <strong>Flexible slots</strong>
-            <span>Morning and afternoon availability.</span>
-          </div>
-          <div>
-            <strong>Simple pricing</strong>
-            <span>Start with the essentials and refine later.</span>
-          </div>
-          <div>
-            <strong>Quick confirmation</strong>
-            <span>Designed to get a booking submitted in minutes.</span>
+        <div class="quote-form-layout">
+          <form class="quote-form">
+            <div class="field-group">
+              <span class="field-label">What should we collect?</span>
+
+              <div class="sentence-builder">
+                <div class="sentence-builder__text">I need to get rid of</div>
+                <div class="sentence-builder__inner">
+                  <input
+                    v-model.number="quantity"
+                    class="quantity-input"
+                    type="number"
+                    min="1"
+                    inputmode="numeric"
+                  />
+
+                  <BDropdown
+                    id="item-dropdown"
+                    variant="light"
+                    boundary="viewport"
+                    class="item-dropdown"
+                    :text="selectedItem?.displayName ?? 'Select an item'"
+                  >
+                    <template
+                      v-for="group in groupedCatalogueItems"
+                      :key="group.category"
+                    >
+                      <BDropdownText class="item-dropdown__category">
+                        {{ group.label }}
+                      </BDropdownText>
+
+                      <BDropdownItemButton
+                        v-for="item in group.items"
+                        :key="item.id"
+                        @click="selectedItem = item"
+                      >
+                        {{ item.displayName }}
+                      </BDropdownItemButton>
+                    </template>
+                  </BDropdown>
+                </div>
+              </div>
+            </div>
+
+            <label class="field-group">
+              <span class="field-label">Postcode</span>
+              <input
+                v-model="postcode"
+                type="text"
+                placeholder="e.g. SW1A 1AA"
+              />
+            </label>
+          </form>
+
+          <div class="quote-panel" aria-live="polite">
+            <span class="quote-panel__label">Live quote</span>
+            <strong class="quote-panel__value">
+              {{ estimatedQuote === null ? '—' : `£${estimatedQuote.toFixed(2)}` }}
+            </strong>
+            <p class="quote-panel__summary">{{ quoteSummary }}</p>
+            <div class="quote-panel__meta">
+              <span class="quote-chip">Instant update</span>
+              <span class="quote-chip quote-chip--soft">No commitment</span>
+            </div>
+            <p class="quote-panel__note">This is just a fast preview for the interface. Final pricing logic can come later.</p>
           </div>
         </div>
-      </section>
-
-      <section class="booking-card" aria-labelledby="booking-title">
-        <div class="booking-card__header">
-          <p class="card-label">Booking Form</p>
-          <h2 id="booking-title">Request your collection</h2>
-        </div>
-<!-- 
-        <p v-if="isLoadingCatalogue" class="booking-status">
-          Loading catalogue items...
-        </p> -->
-        <!-- <p v-else-if="catalogueError" class="booking-status booking-status--error">
-          {{ catalogueError }}
-        </p> -->
-
-        <form class="booking-form">
-          <label>
-            <span>I need to get rid of a:</span>
-            <BDropdown
-              id="item-dropdown"
-              variant="light"
-              boundary="viewport"
-              class="item-dropdown"
-              :text="selectedItem?.displayName ?? 'Select an item type'"
-            >
-              <template
-                v-for="group in groupedCatalogueItems"
-                :key="group.category"
-              >
-                <BDropdownText class="item-dropdown__category">
-                  {{ group.label }}
-                </BDropdownText>
-
-                <BDropdownItemButton
-                  v-for="item in group.items"
-                  :key="item.id"
-                  @click="selectedItem = item"
-                >
-                  {{ item.displayName }}
-                </BDropdownItemButton>
-              </template>
-            </BDropdown>
-          </label>
-
-          <label>
-            <span>Postcode</span>
-            <input type="text" placeholder="e.g. SW1A 1AA" />
-          </label>
-
-          <label>
-            <span>Collection date</span>
-            <input type="date" />
-          </label>
-
-          <label>
-            <span>Service type</span>
-            <select>
-              <option selected disabled>Select a service</option>
-              <option>Bulky waste collection</option>
-              <option>House clearance</option>
-              <option>Garden waste pickup</option>
-            </select>
-          </label>
-
-          <label>
-            <span>Items to collect</span>
-            <textarea
-              rows="4"
-              placeholder="Sofa, mattress, broken shelving, black bags..."
-            />
-          </label>
-
-          <button type="submit">Check availability</button>
-        </form>
       </section>
     </main>
   </div>
@@ -168,20 +158,24 @@ function formatCategoryLabel(category: string) {
   margin: 0;
   font-family: 'Manrope', sans-serif;
   background:
-    radial-gradient(circle at top left, rgba(193, 225, 211, 0.55), transparent 28%),
-    radial-gradient(circle at bottom right, rgba(242, 217, 187, 0.5), transparent 24%),
-    linear-gradient(180deg, #f9f5ee 0%, #f3efe6 100%);
+    radial-gradient(circle at top left, rgba(123, 201, 255, 0.24), transparent 24%),
+    radial-gradient(circle at top right, rgba(255, 209, 102, 0.18), transparent 22%),
+    linear-gradient(180deg, #f7fbff 0%, #eef4f8 100%);
   color: #1f2a24;
-}
-
-:global(a) {
-  color: inherit;
-  text-decoration: none;
 }
 
 .page-shell {
   min-height: 100vh;
   padding: 28px;
+}
+
+.eyebrow {
+  margin: 0;
+  color: #5d6f88;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  font-size: 0.72rem;
+  font-weight: 700;
 }
 
 .site-header {
@@ -191,11 +185,7 @@ function formatCategoryLabel(category: string) {
   gap: 24px;
   max-width: 1180px;
   margin: 0 auto 48px;
-  padding: 18px 22px;
-  border: 1px solid rgba(31, 42, 36, 0.08);
-  border-radius: 999px;
-  background: rgba(255, 252, 247, 0.74);
-  backdrop-filter: blur(16px);
+  padding: 6px 2px;
 }
 
 .brand-block {
@@ -209,31 +199,16 @@ function formatCategoryLabel(category: string) {
   width: 44px;
   height: 44px;
   place-items: center;
-  border-radius: 50%;
-  background: #1f2a24;
-  color: #f8f4ed;
+  border-radius: 14px;
+  background: linear-gradient(135deg, #0f172a 0%, #2563eb 100%);
+  color: #f8fbff;
   font-weight: 800;
   letter-spacing: 0.08em;
-}
-
-.eyebrow,
-.brand-name,
-.card-label,
-.hero-kicker {
-  margin: 0;
-}
-
-.eyebrow,
-.card-label,
-.hero-kicker {
-  color: #567465;
-  text-transform: uppercase;
-  letter-spacing: 0.12em;
-  font-size: 0.72rem;
-  font-weight: 700;
+  box-shadow: 0 10px 24px rgba(37, 99, 235, 0.22);
 }
 
 .brand-name {
+  margin: 2px 0 0;
   font-size: 0.95rem;
   font-weight: 700;
 }
@@ -243,146 +218,136 @@ function formatCategoryLabel(category: string) {
   flex-wrap: wrap;
   gap: 22px;
   font-size: 0.95rem;
-  color: #42564c;
+  color: #52637c;
 }
 
-.hero-layout {
-  display: grid;
-  grid-template-columns: minmax(0, 1.15fr) minmax(320px, 460px);
-  gap: 36px;
-  align-items: center;
+.site-nav a {
+  color: inherit;
+  text-decoration: none;
+  transition: color 0.2s ease;
+}
+
+.site-nav a:hover {
+  color: #2563eb;
+}
+
+.form-stage {
   max-width: 1180px;
   margin: 0 auto;
 }
 
-.hero-copy {
-  padding: 28px 8px 28px 4px;
-}
-
-.hero-copy h1 {
-  margin: 14px 0 18px;
-  max-width: 10ch;
-  font-family: 'Fraunces', serif;
-  font-size: clamp(3.3rem, 8vw, 6rem);
-  line-height: 0.92;
-  letter-spacing: -0.06em;
-}
-
-.hero-text {
-  max-width: 58ch;
-  margin: 0 0 30px;
-  font-size: 1.05rem;
-  line-height: 1.7;
-  color: #4f6358;
-}
-
-.hero-points {
+.quote-form-panel {
+  width: min(100%, 1040px);
+  margin: 0 auto;
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 16px;
+  gap: 22px;
+  padding: 12px 0 0;
 }
 
-.hero-points div {
-  padding: 18px;
-  border-radius: 24px;
-  background: rgba(255, 252, 247, 0.65);
-  border: 1px solid rgba(31, 42, 36, 0.08);
+.quote-form-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1.6fr) minmax(320px, 1fr);
+  gap: 32px;
+  align-items: start;
 }
 
-.hero-points strong,
-.hero-points span {
-  display: block;
+.form-copy {
+  padding-top: 0;
 }
 
-.hero-points strong {
-  margin-bottom: 8px;
-  font-size: 0.95rem;
+.section-kicker {
+  margin: 0 0 12px;
+  color: #2563eb;
+  font-size: 0.82rem;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
 }
 
-.hero-points span,
-.booking-card__header p {
-  color: #56695f;
+.form-copy h1 {
+  margin: 0;
+  font-family: 'Fraunces', serif;
+  font-size: clamp(2.4rem, 5vw, 4.2rem);
+  line-height: 0.94;
+  letter-spacing: -0.06em;
+  color: #132033;
+}
+
+.form-copy__text {
+  margin: 16px 0 0;
+  max-width: 40ch;
+  color: #5e6f86;
   line-height: 1.6;
 }
 
-.booking-card {
-  padding: 28px;
-  border-radius: 32px;
-  background: rgba(255, 253, 250, 0.88);
-  border: 1px solid rgba(31, 42, 36, 0.08);
-  box-shadow: 0 24px 80px rgba(60, 58, 38, 0.11);
+.quote-form {
+  display: grid;
+  gap: 22px;
 }
 
-.booking-card__header h2 {
-  margin: 10px 0 10px;
-  font-family: 'Fraunces', serif;
-  font-size: 2rem;
-  line-height: 1.05;
+.field-group {
+  display: grid;
+  gap: 10px;
 }
 
-.booking-status {
-  margin: 18px 0 0;
-  color: #56695f;
+.field-label {
   font-size: 0.95rem;
+  font-weight: 800;
+  color: #304b78;
 }
 
-.booking-status--error {
-  color: #8c3b2f;
+.sentence-builder {
+  display: flex;
+  flex-direction: column;
+  align-items: start;
+  flex-wrap: wrap;
+  gap: 10px;
+  padding: 14px;
+  border: 1px solid rgba(37, 99, 235, 0.12);
+  border-radius: 20px;
+  background: linear-gradient(180deg, #f9fbff 0%, #f2f7ff 100%);
 }
 
-.booking-form {
-  display: grid;
-  gap: 16px;
-  margin-top: 24px;
-}
-
-.booking-form label {
-  display: grid;
-  gap: 8px;
-}
-
-.booking-form span {
-  font-size: 0.9rem;
+.sentence-builder__text {
+  font-size: 1.05rem;
+  color: #1f3352;
   font-weight: 700;
-  color: #304138;
 }
 
-.booking-form input,
-.booking-form select,
-.booking-form textarea {
+.sentence-builder__inner {
+  display: grid;
+  grid-template-columns: 72px minmax(0, 1fr);
+  gap: 10px;
   width: 100%;
-  border: 1px solid rgba(63, 82, 72, 0.14);
-  border-radius: 18px;
+  align-items: stretch;
+}
+
+.quote-form input {
+  width: 100%;
+  border: 1px solid rgba(37, 99, 235, 0.12);
+  border-radius: 16px;
   padding: 14px 16px;
   font: inherit;
-  color: #1f2a24;
-  background: #fffdfa;
-  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+  color: #132033;
+  background: #ffffff;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease, transform 0.2s ease;
 }
 
-.booking-form input:focus,
-.booking-form select:focus,
-.booking-form textarea:focus {
+.quote-form input:focus {
   outline: none;
-  border-color: #6f8d7e;
-  box-shadow: 0 0 0 4px rgba(111, 141, 126, 0.14);
+  border-color: #2563eb;
+  box-shadow: 0 0 0 4px rgba(37, 99, 235, 0.14);
+  transform: translateY(-1px);
 }
 
-.booking-form textarea {
-  resize: vertical;
-  min-height: 120px;
-}
-
-.booking-form button {
-  margin-top: 8px;
-  border: 0;
-  border-radius: 999px;
-  padding: 16px 20px;
-  font: inherit;
-  font-weight: 800;
-  color: #f8f4ed;
-  background: linear-gradient(135deg, #1f2a24 0%, #31473d 100%);
-  cursor: pointer;
+.quantity-input {
+  width: 72px;
+  min-width: 72px;
+  max-width: 72px;
+  text-align: center;
+  font-size: 1rem;
+  font-weight: 700;
+  padding-inline: 10px;
 }
 
 .item-dropdown {
@@ -393,8 +358,8 @@ function formatCategoryLabel(category: string) {
   width: 100%;
   padding: 14px 16px;
   font: inherit;
-  color: #1f2a24;
-  background: #fffdfa;
+  color: #132033;
+  background: #ffffff;
   text-align: left;
 }
 
@@ -402,13 +367,18 @@ function formatCategoryLabel(category: string) {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  border: 1px solid rgba(63, 82, 72, 0.14);
-  border-radius: 18px;
+  border: 1px solid rgba(37, 99, 235, 0.12);
+  border-radius: 16px;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease, transform 0.2s ease;
 }
 
 .item-dropdown :deep(button.dropdown-toggle:focus) {
-  border-color: #6f8d7e;
-  box-shadow: 0 0 0 4px rgba(111, 141, 126, 0.14);
+  border-color: #2563eb;
+  box-shadow: 0 0 0 4px rgba(37, 99, 235, 0.14);
+}
+
+.item-dropdown :deep(button.dropdown-toggle:hover) {
+  transform: translateY(-1px);
 }
 
 .item-dropdown :deep(.item-dropdown__category) {
@@ -417,25 +387,104 @@ function formatCategoryLabel(category: string) {
   font-weight: 800;
   letter-spacing: 0.08em;
   text-transform: uppercase;
-  color: #567465;
+  color: #2563eb;
+}
+
+.quote-panel {
+  padding: 24px;
+  border-radius: 24px;
+  background:
+    radial-gradient(circle at top right, rgba(123, 201, 255, 0.26), transparent 38%),
+    linear-gradient(180deg, #15243b 0%, #1d3557 100%);
+  border: 1px solid rgba(19, 32, 51, 0.08);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.08),
+    0 20px 40px rgba(19, 32, 51, 0.16);
+}
+
+.quote-panel__label,
+.quote-panel__summary,
+.quote-panel__note {
+  color: rgba(231, 240, 255, 0.78);
+}
+
+.quote-panel__label {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+  font-size: 0.78rem;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  padding: 7px 10px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.quote-panel__label::before {
+  content: '';
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #7cc9ff;
+  box-shadow: 0 0 0 6px rgba(124, 201, 255, 0.14);
+}
+
+.quote-panel__value {
+  display: block;
+  font-family: 'Fraunces', serif;
+  font-size: clamp(2rem, 4vw, 3rem);
+  line-height: 1;
+  letter-spacing: -0.05em;
+  color: #ffffff;
+}
+
+.quote-panel__summary {
+  margin: 10px 0 0;
+  line-height: 1.5;
+}
+
+.quote-panel__meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 16px;
+}
+
+.quote-chip {
+  display: inline-flex;
+  align-items: center;
+  min-height: 32px;
+  padding: 0 12px;
+  border-radius: 999px;
+  font-size: 0.82rem;
+  font-weight: 800;
+  color: #0f2747;
+  background: #7cc9ff;
+}
+
+.quote-chip--soft {
+  color: #e7f0ff;
+  background: rgba(255, 255, 255, 0.12);
+}
+
+.quote-panel__note {
+  margin: 12px 0 0;
+  font-size: 0.9rem;
+  line-height: 1.5;
 }
 
 @media (max-width: 960px) {
-  .site-header,
-  .hero-layout {
-    grid-template-columns: 1fr;
-  }
-
   .site-header {
-    border-radius: 32px;
-    padding: 18px;
+    margin-bottom: 36px;
   }
 
-  .hero-layout {
-    gap: 24px;
+  .quote-form-panel {
+    width: min(100%, 100%);
   }
 
-  .hero-points {
+  .quote-form-layout {
     grid-template-columns: 1fr;
   }
 }
@@ -447,20 +496,33 @@ function formatCategoryLabel(category: string) {
 
   .site-header {
     align-items: flex-start;
+    margin-bottom: 28px;
   }
 
-  .site-nav {
-    gap: 14px;
+  .form-copy h1 {
+    font-size: clamp(2.2rem, 12vw, 3.3rem);
   }
 
-  .hero-copy h1 {
+  .quote-panel {
+    padding: 20px;
+  }
+
+  .sentence-builder {
+    align-items: stretch;
+  }
+
+  .sentence-builder__text {
+    width: 100%;
+  }
+
+  .sentence-builder__inner {
+    grid-template-columns: 1fr;
+  }
+
+  .quantity-input {
+    width: 100%;
+    min-width: 0;
     max-width: none;
-    font-size: clamp(2.8rem, 16vw, 4rem);
-  }
-
-  .booking-card {
-    padding: 22px;
-    border-radius: 24px;
   }
 }
 </style>
