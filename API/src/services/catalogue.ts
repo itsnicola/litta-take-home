@@ -1,4 +1,5 @@
 import { pool } from '../db';
+import { randomBytes } from 'crypto';
 
 export type CatalogueCategory =
     | 'furniture'
@@ -13,6 +14,12 @@ export interface CatalogueItem {
     display_name: string;
     category: CatalogueCategory;
     base_fee: number;
+}
+
+export interface BookingRequest {
+    bookingReference: string;
+    quote: number;
+    status: string;
 }
 
 /**
@@ -38,6 +45,42 @@ export async function getQuote(catalogueItemId: number, quantity: number, postco
     return quote;
 }
 
+
+export async function postRequest(catalogueItemId: number, quantity: number, postcode: string, userName: string, userEmail: string): Promise<BookingRequest> {
+    await pool.query(`
+        INSERT INTO users(display_name, email)
+        SELECT $1, $2
+        WHERE NOT EXISTS (SELECT 1 FROM users WHERE display_name = $1 AND email = $2)
+        `, [userName, userEmail]);
+
+    const userLookupResponse = await pool.query(`
+        SELECT id FROM users WHERE display_name = $1 AND email = $2`
+    , [userName, userEmail]);
+
+    const userId = userLookupResponse.rows[0]?.id;
+    const quote = await getQuote(catalogueItemId, quantity, postcode);
+    const bookingReference = generateRef(catalogueItemId, postcode);
+
+    await pool.query(`
+        INSERT INTO booking(item_id, user_id, reference, item_number, quote, booking_status)
+        VALUES($1, $2, $3, $4, $5, 'PENDING')
+        `, [catalogueItemId, userId, bookingReference, quantity, quote]);
+
+    return {
+        bookingReference,
+        quote,
+        status: 'PENDING',
+    };
+}
+
+function generateRef(catalogueItemId: number, postcode: string) {
+    const normalizedPostcode = postcode.replace(/[^A-Za-z0-9]/g, '').toUpperCase();
+    const postcodeFragment = (normalizedPostcode || 'XXXX').slice(0, 4).padEnd(4, 'X');
+    const itemFragment = String(catalogueItemId).padStart(2, '0').slice(-2);
+    const randomFragment = randomBytes(3).toString('hex').toUpperCase();
+
+    return `LIT-${itemFragment}-${postcodeFragment}-${randomFragment}`;
+}
 
 /**
  * Rule for postcode surcharge is as follows: 

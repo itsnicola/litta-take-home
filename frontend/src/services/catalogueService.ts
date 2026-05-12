@@ -14,6 +14,12 @@ export interface CatalogueItem {
   baseFee: number
 }
 
+export interface BookingRequestResponse {
+  bookingReference: string
+  quote: number
+  status: string
+}
+
 
 export async function loadCatalogue(): Promise<CatalogueItem[]> {
     try {
@@ -42,6 +48,18 @@ export async function getQuote(catalogueItemId: number, quantity: number, postco
     return Number(apiResponse);
 }
 
+export async function sendRequest(
+  catalogueItemId: number,
+  quantity: number,
+  postcode: string,
+  customerName: string,
+  customerEmail: string,
+): Promise<BookingRequestResponse> {
+    const params = { catalogueItemId, quantity, postcode, customerName, customerEmail }
+    const apiResponse = await requestJson<BookingRequestResponse>('/catalogue/request', { method: 'POST' }, params)
+
+    return apiResponse
+}
 
 function mapCatalogueItem(row: Record<string, any>): CatalogueItem {
     return {

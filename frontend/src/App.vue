@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue'
 import { BDropdown, BDropdownItemButton, BDropdownText } from 'bootstrap-vue-next'
-import { getQuote, type CatalogueItem, loadCatalogue } from './services/catalogueService'
+import { getQuote, type BookingRequestResponse, type CatalogueItem, loadCatalogue, sendRequest as sendRequestService } from './services/catalogueService'
 
 const navItems = ['Services', 'About', 'Contact']
 const catalogueItems = ref<CatalogueItem[]>([])
@@ -13,7 +13,10 @@ const customerEmail = ref('')
 const quotedAmount = ref<number | null>(null)
 const quoteLoading = ref(false)
 const quoteError = ref('')
-const currentStep = ref<'quote' | 'details'>('quote')
+const requestSubmitting = ref(false)
+const requestError = ref('')
+const requestSuccess = ref<BookingRequestResponse | null>(null)
+const currentStep = ref<'quote' | 'details' | 'success'>('quote')
 let latestQuoteRequestId = 0
 
 const groupedCatalogueItems = computed(() => {
@@ -115,11 +118,18 @@ const quoteSummary = computed(() => {
   return `Live quote for ${quantity.value} ${itemLabel}`
 })
 
-const quoteHeading = computed(() => currentStep.value === 'quote' ? 'Tell us what needs to go.' : 'Where should we send the request?')
+const quoteHeading = computed(() => {
+  if (currentStep.value === 'quote') return 'Tell us what needs to go.'
+  if (currentStep.value === 'details') return 'Where should we send the request?'
+  return 'Request received.'
+})
+
 const quoteDescription = computed(() =>
   currentStep.value === 'quote'
     ? 'Choose an item, set the quantity, and get an instant feel for the price.'
-    : 'Add your contact details so we can turn this quote into a collection request.'
+    : currentStep.value === 'details'
+      ? 'Add your contact details so we can turn this quote into a collection request.'
+      : 'Your collection request has been submitted. We’ll use these details to follow up.'
 )
 
 function goToDetailsStep() {
@@ -129,6 +139,30 @@ function goToDetailsStep() {
 
 function returnToQuoteStep() {
   currentStep.value = 'quote'
+}
+
+async function sendRequest() {
+  if (!selectedItem.value || !requestDetailsValid.value || requestSubmitting.value) {
+    return
+  }
+
+  requestSubmitting.value = true
+  requestError.value = ''
+
+  try {
+    requestSuccess.value = await sendRequestService(
+      selectedItem.value.id,
+      quantity.value,
+      postcode.value.trim(),
+      customerName.value.trim(),
+      customerEmail.value.trim(),
+    )
+    currentStep.value = 'success'
+  } catch (error) {
+    requestError.value = error instanceof Error ? error.message : 'Unable to send your request.'
+  } finally {
+    requestSubmitting.value = false
+  }
 }
 </script>
 
@@ -222,7 +256,7 @@ function returnToQuoteStep() {
             </form>
 
             <form
-              v-else
+              v-else-if="currentStep === 'details'"
               key="details"
               class="quote-form request-form"
             >
@@ -249,22 +283,50 @@ function returnToQuoteStep() {
                 />
               </label>
             </form>
+
+            <section
+              v-else
+              key="success"
+              class="quote-form success-panel"
+            >
+              <span class="success-panel__eyebrow">Booking confirmed</span>
+              <h2>We’ve created your collection request.</h2>
+              <p>
+                Your reference is
+                <strong>{{ requestSuccess?.bookingReference }}</strong>.
+                We’ll be in touch using <strong>{{ customerEmail.trim() }}</strong>.
+              </p>
+
+              <div class="success-panel__meta">
+                <span class="success-panel__pill">{{ customerName.trim() }}</span>
+                <span class="success-panel__pill">{{ postcode.trim() }}</span>
+              </div>
+            </section>
           </Transition>
 
           <div class="quote-panel" aria-live="polite">
-            <span class="quote-panel__label">Live quote</span>
+            <span class="quote-panel__label">{{ currentStep === 'success' ? 'Request status' : 'Live quote' }}</span>
             <strong class="quote-panel__value">
               {{ estimatedQuote === null ? '—' : `£${estimatedQuote.toFixed(2)}` }}
             </strong>
-            <p class="quote-panel__summary">{{ quoteSummary }}</p>
+            <p class="quote-panel__summary">
+              {{ currentStep === 'success' ? `Request submitted with status ${requestSuccess?.status ?? 'PENDING'}.` : quoteSummary }}
+            </p>
 
             <div
-              v-if="currentStep === 'details' && selectedItem"
+              v-if="currentStep !== 'quote' && selectedItem"
               class="quote-panel__meta"
             >
               <span class="quote-meta-pill">{{ quantity }} x {{ selectedItem.displayName }}</span>
               <span class="quote-meta-pill">{{ postcode.trim() }}</span>
             </div>
+
+            <p
+              v-if="requestError"
+              class="quote-panel__error"
+            >
+              {{ requestError }}
+            </p>
 
             <div class="quote-panel__footer">
               <button
@@ -277,7 +339,7 @@ function returnToQuoteStep() {
               </button>
 
               <div
-                v-else
+                v-else-if="currentStep === 'details'"
                 class="quote-panel__actions"
               >
                 <button
@@ -289,9 +351,23 @@ function returnToQuoteStep() {
                 </button>
                 <button
                   type="button"
-                  :disabled="!requestDetailsValid"
+                  :disabled="!requestDetailsValid || requestSubmitting"
+                  @click="sendRequest"
                 >
-                  Send collection request
+                  {{ requestSubmitting ? 'Sending request...' : 'Send collection request' }}
+                </button>
+              </div>
+
+              <div
+                v-else
+                class="quote-panel__actions"
+              >
+                <button
+                  type="button"
+                  class="button-secondary"
+                  @click="returnToQuoteStep"
+                >
+                  Create another quote
                 </button>
               </div>
             </div>
@@ -472,6 +548,61 @@ function returnToQuoteStep() {
   letter-spacing: 0.08em;
   text-transform: uppercase;
   color: #2563eb;
+}
+
+.success-panel {
+  align-content: start;
+  gap: 16px;
+  padding: 28px;
+  border-radius: 28px;
+  background:
+    radial-gradient(circle at top right, rgba(124, 201, 255, 0.28), transparent 38%),
+    linear-gradient(180deg, #ffffff 0%, #eef6ff 100%);
+  border: 1px solid rgba(37, 99, 235, 0.12);
+  box-shadow: 0 24px 48px rgba(37, 99, 235, 0.08);
+}
+
+.success-panel h2,
+.success-panel p {
+  margin: 0;
+}
+
+.success-panel h2 {
+  font-family: 'Fraunces', serif;
+  font-size: clamp(1.9rem, 4vw, 2.8rem);
+  line-height: 1;
+  letter-spacing: -0.05em;
+  color: #132033;
+}
+
+.success-panel p {
+  color: #4f627c;
+  line-height: 1.7;
+}
+
+.success-panel__eyebrow {
+  font-size: 0.78rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #2563eb;
+}
+
+.success-panel__meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.success-panel__pill {
+  display: inline-flex;
+  align-items: center;
+  padding: 10px 14px;
+  border-radius: 999px;
+  background: rgba(37, 99, 235, 0.08);
+  color: #1f3352;
+  font-size: 0.85rem;
+  font-weight: 700;
 }
 
 .field-group {
@@ -662,6 +793,12 @@ function returnToQuoteStep() {
   flex-wrap: wrap;
   justify-content: center;
   gap: 12px;
+}
+
+.quote-panel__error {
+  margin: 14px 0 0;
+  color: #ffd0d0;
+  line-height: 1.5;
 }
 
 button {

@@ -19,7 +19,6 @@ CREATE TABLE IF NOT EXISTS crew (
 
 CREATE TABLE IF NOT EXISTS users (
     id              SERIAL PRIMARY KEY,
-    name            TEXT,
     display_name    TEXT,
     email           TEXT,
     created_at      TIMESTAMP DEFAULT CURRENT_TIMESTAMP
