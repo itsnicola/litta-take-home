@@ -34,6 +34,15 @@ export async function loadCatalogue(): Promise<CatalogueItem[]> {
         return [];
     }
 }
+
+export async function getQuote(catalogueItemId: number, quantity: number, postcode: string): Promise<number> {
+    const params = { catalogueItemId, quantity, postcode }
+    const apiResponse = await requestJson('/catalogue/quote', { method: 'GET' }, params);
+
+    return Number(apiResponse);
+}
+
+
 function mapCatalogueItem(row: Record<string, any>): CatalogueItem {
     return {
         id: row.id as number,

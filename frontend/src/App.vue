@@ -1,13 +1,17 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import { BDropdown, BDropdownItemButton, BDropdownText } from 'bootstrap-vue-next'
-import { type CatalogueItem, loadCatalogue } from './services/catalogueService'
+import { getQuote, type CatalogueItem, loadCatalogue } from './services/catalogueService'
 
 const navItems = ['Services', 'About', 'Contact']
 const catalogueItems = ref<CatalogueItem[]>([])
 const selectedItem = ref<CatalogueItem | null>(null)
 const quantity = ref(1)
 const postcode = ref('')
+const quotedAmount = ref<number | null>(null)
+const quoteLoading = ref(false)
+const quoteError = ref('')
+let latestQuoteRequestId = 0
 
 const groupedCatalogueItems = computed(() => {
   const groupedItems = new Map<string, CatalogueItem[]>()
@@ -33,15 +37,62 @@ function formatCategoryLabel(category: string) {
   return category.charAt(0).toUpperCase() + category.slice(1)
 }
 
-const estimatedQuote = computed(() => {
-  if (!selectedItem.value) return null
-  return selectedItem.value.baseFee * Math.max(quantity.value, 1)
+watch([selectedItem, quantity, postcode], () => {
+  void refreshQuote()
 })
 
+async function refreshQuote() {
+  const item = selectedItem.value
+  const trimmedPostcode = postcode.value.trim()
+  const normalizedQuantity = Math.max(Number(quantity.value) || 1, 1)
+
+  quantity.value = normalizedQuantity
+
+  if (!item || !trimmedPostcode) {
+    quotedAmount.value = null
+    quoteError.value = ''
+    quoteLoading.value = false
+    return
+  }
+
+  const requestId = ++latestQuoteRequestId
+  quoteLoading.value = true
+  quoteError.value = ''
+
+  // TODO: verify postcode before send!
+
+  try {
+    const nextQuote = await getQuote(item.id, normalizedQuantity, trimmedPostcode)
+
+    if (requestId !== latestQuoteRequestId) {
+      return
+    }
+
+    quotedAmount.value = nextQuote
+  } catch (error) {
+    if (requestId !== latestQuoteRequestId) {
+      return
+    }
+
+    quotedAmount.value = null
+    quoteError.value = error instanceof Error ? error.message : 'Unable to load quote.'
+  } finally {
+    if (requestId === latestQuoteRequestId) {
+      quoteLoading.value = false
+    }
+  }
+}
+
+const estimatedQuote = computed(() => quotedAmount.value)
+
 const quoteSummary = computed(() => {
-  if (!selectedItem.value) return 'Choose an item and quantity to see your quote.'
+  if (!selectedItem.value) return 'Choose an item and quantity to request a quote.'
+  if (!postcode.value.trim()) return 'Enter a postcode to request a live quote.'
+  if (quoteLoading.value) return 'Refreshing quote...'
+  if (quoteError.value) return quoteError.value
+
   const itemLabel = quantity.value === 1 ? selectedItem.value.displayName : `${selectedItem.value.displayName}s`
-  return `Estimated quote for ${quantity.value} ${itemLabel}`
+  return `Live quote for ${quantity.value} ${itemLabel}`
 })
 </script>
 
@@ -139,7 +190,7 @@ const quoteSummary = computed(() => {
               <span class="quote-chip">Instant update</span>
               <span class="quote-chip quote-chip--soft">No commitment</span>
             </div>
-            <p class="quote-panel__note">This is just a fast preview for the interface. Final pricing logic can come later.</p>
+            <p class="quote-panel__note">Quotes refresh automatically as you update the item, quantity, or postcode.</p>
           </div>
         </div>
       </section>
@@ -237,7 +288,8 @@ const quoteSummary = computed(() => {
 }
 
 .quote-form-panel {
-  width: min(100%, 1040px);
+  width: 100%;
+  max-width: 1040px;
   margin: 0 auto;
   display: grid;
   gap: 22px;
@@ -249,10 +301,6 @@ const quoteSummary = computed(() => {
   grid-template-columns: minmax(0, 1.6fr) minmax(320px, 1fr);
   gap: 32px;
   align-items: start;
-}
-
-.form-copy {
-  padding-top: 0;
 }
 
 .section-kicker {
@@ -299,8 +347,6 @@ const quoteSummary = computed(() => {
 .sentence-builder {
   display: flex;
   flex-direction: column;
-  align-items: start;
-  flex-wrap: wrap;
   gap: 10px;
   padding: 14px;
   border: 1px solid rgba(37, 99, 235, 0.12);
@@ -322,15 +368,19 @@ const quoteSummary = computed(() => {
   align-items: stretch;
 }
 
-.quote-form input {
-  width: 100%;
+.quote-form input,
+.item-dropdown :deep(button.dropdown-toggle) {
   border: 1px solid rgba(37, 99, 235, 0.12);
   border-radius: 16px;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease, transform 0.2s ease;
+}
+
+.quote-form input {
+  width: 100%;
   padding: 14px 16px;
   font: inherit;
   color: #132033;
   background: #ffffff;
-  transition: border-color 0.2s ease, box-shadow 0.2s ease, transform 0.2s ease;
 }
 
 .quote-form input:focus {
@@ -367,9 +417,6 @@ const quoteSummary = computed(() => {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  border: 1px solid rgba(37, 99, 235, 0.12);
-  border-radius: 16px;
-  transition: border-color 0.2s ease, box-shadow 0.2s ease, transform 0.2s ease;
 }
 
 .item-dropdown :deep(button.dropdown-toggle:focus) {
@@ -480,10 +527,6 @@ const quoteSummary = computed(() => {
     margin-bottom: 36px;
   }
 
-  .quote-form-panel {
-    width: min(100%, 100%);
-  }
-
   .quote-form-layout {
     grid-template-columns: 1fr;
   }
@@ -509,10 +552,6 @@ const quoteSummary = computed(() => {
 
   .sentence-builder {
     align-items: stretch;
-  }
-
-  .sentence-builder__text {
-    width: 100%;
   }
 
   .sentence-builder__inner {
