@@ -8,9 +8,12 @@ const catalogueItems = ref<CatalogueItem[]>([])
 const selectedItem = ref<CatalogueItem | null>(null)
 const quantity = ref(1)
 const postcode = ref('')
+const customerName = ref('')
+const customerEmail = ref('')
 const quotedAmount = ref<number | null>(null)
 const quoteLoading = ref(false)
 const quoteError = ref('')
+const currentStep = ref<'quote' | 'details'>('quote')
 let latestQuoteRequestId = 0
 
 const groupedCatalogueItems = computed(() => {
@@ -42,6 +45,12 @@ watch([selectedItem, quantity, postcode], () => {
 })
 
 async function refreshQuote() {
+  if (!validInputs.value) {
+    quotedAmount.value = null
+    quoteError.value = ''
+    quoteLoading.value = false
+    return
+  }
   const item = selectedItem.value
   const trimmedPostcode = postcode.value.trim()
   const normalizedQuantity = Math.max(Number(quantity.value) || 1, 1)
@@ -84,6 +93,17 @@ async function refreshQuote() {
 }
 
 const estimatedQuote = computed(() => quotedAmount.value)
+const hasLiveQuote = computed(() => quotedAmount.value !== null && !quoteLoading.value && !quoteError.value)
+const isEmailValid = computed(() => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(customerEmail.value.trim()))
+
+const validInputs = computed(() => {
+  if (!selectedItem.value) return false
+  if (!postcode.value.trim()) return false // TODO: expand to valid postcodes
+  return true
+})
+
+const canContinueToDetails = computed(() => validInputs.value && hasLiveQuote.value)
+const requestDetailsValid = computed(() => customerName.value.trim().length > 1 && isEmailValid.value)
 
 const quoteSummary = computed(() => {
   if (!selectedItem.value) return 'Choose an item and quantity to request a quote.'
@@ -94,6 +114,22 @@ const quoteSummary = computed(() => {
   const itemLabel = quantity.value === 1 ? selectedItem.value.displayName : `${selectedItem.value.displayName}s`
   return `Live quote for ${quantity.value} ${itemLabel}`
 })
+
+const quoteHeading = computed(() => currentStep.value === 'quote' ? 'Tell us what needs to go.' : 'Where should we send the request?')
+const quoteDescription = computed(() =>
+  currentStep.value === 'quote'
+    ? 'Choose an item, set the quantity, and get an instant feel for the price.'
+    : 'Add your contact details so we can turn this quote into a collection request.'
+)
+
+function goToDetailsStep() {
+  if (!canContinueToDetails.value) return
+  currentStep.value = 'details'
+}
+
+function returnToQuoteStep() {
+  currentStep.value = 'quote'
+}
 </script>
 
 <template>
@@ -122,63 +158,98 @@ const quoteSummary = computed(() => {
       <section class="quote-form-panel" aria-labelledby="quote-form-title">
         <div class="form-copy">
           <p class="section-kicker">Quick estimate</p>
-          <h1 id="quote-form-title">Tell us what needs to go.</h1>
-          <p class="form-copy__text">Choose an item, set the quantity, and get an instant feel for the price.</p>
+          <h1 id="quote-form-title">{{ quoteHeading }}</h1>
+          <p class="form-copy__text">{{ quoteDescription }}</p>
         </div>
 
         <div class="quote-form-layout">
-          <form class="quote-form">
-            <div class="field-group">
-              <span class="field-label">What should we collect?</span>
+          <Transition name="form-step" mode="out-in">
+            <form
+              v-if="currentStep === 'quote'"
+              key="quote"
+              class="quote-form"
+            >
+              <div class="field-group">
+                <span class="field-label">What should we collect?</span>
 
-              <div class="sentence-builder">
-                <div class="sentence-builder__text">I need to get rid of</div>
-                <div class="sentence-builder__inner">
-                  <input
-                    v-model.number="quantity"
-                    class="quantity-input"
-                    type="number"
-                    min="1"
-                    inputmode="numeric"
-                  />
+                <div class="sentence-builder">
+                  <div class="sentence-builder__text">I need to get rid of</div>
+                  <div class="sentence-builder__inner">
+                    <input
+                      v-model.number="quantity"
+                      class="quantity-input"
+                      type="number"
+                      min="1"
+                      inputmode="numeric"
+                    />
 
-                  <BDropdown
-                    id="item-dropdown"
-                    variant="light"
-                    boundary="viewport"
-                    class="item-dropdown"
-                    :text="selectedItem?.displayName ?? 'Select an item'"
-                  >
-                    <template
-                      v-for="group in groupedCatalogueItems"
-                      :key="group.category"
+                    <BDropdown
+                      id="item-dropdown"
+                      variant="light"
+                      boundary="viewport"
+                      class="item-dropdown"
+                      :text="selectedItem?.displayName ?? 'Select an item'"
                     >
-                      <BDropdownText class="item-dropdown__category">
-                        {{ group.label }}
-                      </BDropdownText>
-
-                      <BDropdownItemButton
-                        v-for="item in group.items"
-                        :key="item.id"
-                        @click="selectedItem = item"
+                      <template
+                        v-for="group in groupedCatalogueItems"
+                        :key="group.category"
                       >
-                        {{ item.displayName }}
-                      </BDropdownItemButton>
-                    </template>
-                  </BDropdown>
+                        <BDropdownText class="item-dropdown__category">
+                          {{ group.label }}
+                        </BDropdownText>
+
+                        <BDropdownItemButton
+                          v-for="item in group.items"
+                          :key="item.id"
+                          @click="selectedItem = item"
+                        >
+                          {{ item.displayName }}
+                        </BDropdownItemButton>
+                      </template>
+                    </BDropdown>
+                  </div>
                 </div>
               </div>
-            </div>
 
-            <label class="field-group">
-              <span class="field-label">Postcode</span>
-              <input
-                v-model="postcode"
-                type="text"
-                placeholder="e.g. SW1A 1AA"
-              />
-            </label>
-          </form>
+              <label class="field-group">
+                <span class="field-label">Postcode</span>
+                <input
+                  v-model="postcode"
+                  type="text"
+                  placeholder="e.g. SW1A 1AA"
+                />
+              </label>
+            </form>
+
+            <form
+              v-else
+              key="details"
+              class="quote-form request-form"
+            >
+              <div class="request-intro">
+                <span class="request-intro__eyebrow">Request details</span>
+                <p>We’ll keep this quote and use these details to place your collection request.</p>
+              </div>
+
+              <label class="field-group">
+                <span class="field-label">Your name</span>
+                <input
+                  v-model="customerName"
+                  type="text"
+                  placeholder="e.g. Alex Morgan"
+                />
+              </label>
+
+              <label class="field-group">
+                <span class="field-label">Email</span>
+                <input
+                  v-model="customerEmail"
+                  type="email"
+                  placeholder="e.g. alex@example.com"
+                />
+              </label>
+            </form>
+          </Transition>
 
           <div class="quote-panel" aria-live="polite">
             <span class="quote-panel__label">Live quote</span>
@@ -186,11 +257,44 @@ const quoteSummary = computed(() => {
               {{ estimatedQuote === null ? '—' : `£${estimatedQuote.toFixed(2)}` }}
             </strong>
             <p class="quote-panel__summary">{{ quoteSummary }}</p>
-            <div class="quote-panel__meta">
-              <span class="quote-chip">Instant update</span>
-              <span class="quote-chip quote-chip--soft">No commitment</span>
+
+            <div
+              v-if="currentStep === 'details' && selectedItem"
+              class="quote-panel__meta"
+            >
+              <span class="quote-meta-pill">{{ quantity }} x {{ selectedItem.displayName }}</span>
+              <span class="quote-meta-pill">{{ postcode.trim() }}</span>
             </div>
-            <p class="quote-panel__note">Quotes refresh automatically as you update the item, quantity, or postcode.</p>
+
+            <div class="quote-panel__footer">
+              <button
+                v-if="currentStep === 'quote'"
+                type="button"
+                :disabled="!canContinueToDetails"
+                @click="goToDetailsStep"
+              >
+                Take it away!
+              </button>
+
+              <div
+                v-else
+                class="quote-panel__actions"
+              >
+                <button
+                  type="button"
+                  class="button-secondary"
+                  @click="returnToQuoteStep"
+                >
+                  Back to quote
+                </button>
+                <button
+                  type="button"
+                  :disabled="!requestDetailsValid"
+                >
+                  Send collection request
+                </button>
+              </div>
+            </div>
           </div>
         </div>
       </section>
@@ -331,6 +435,43 @@ const quoteSummary = computed(() => {
 .quote-form {
   display: grid;
   gap: 22px;
+}
+
+.form-step-enter-active,
+.form-step-leave-active {
+  transition: opacity 0.32s ease, transform 0.32s ease;
+}
+
+.form-step-enter-from,
+.form-step-leave-to {
+  opacity: 0;
+  transform: translateY(18px);
+}
+
+.request-form {
+  align-content: start;
+}
+
+.request-intro {
+  display: grid;
+  gap: 10px;
+  padding: 18px 18px 16px;
+  border-radius: 20px;
+  background: linear-gradient(180deg, rgba(37, 99, 235, 0.08) 0%, rgba(124, 201, 255, 0.12) 100%);
+  color: #1f3352;
+}
+
+.request-intro p {
+  margin: 0;
+  line-height: 1.6;
+}
+
+.request-intro__eyebrow {
+  font-size: 0.75rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #2563eb;
 }
 
 .field-group {
@@ -499,27 +640,61 @@ const quoteSummary = computed(() => {
   margin-top: 16px;
 }
 
-.quote-chip {
+.quote-meta-pill {
   display: inline-flex;
   align-items: center;
-  min-height: 32px;
+  padding: 8px 12px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.08);
+  color: rgba(231, 240, 255, 0.9);
+  font-size: 0.82rem;
+  font-weight: 700;
+}
+
+.quote-panel__footer {
+  display: flex;
+  justify-content: center;
+  margin-top: 22px;
+}
+
+.quote-panel__actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 12px;
+}
+
+button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 64px;
+  min-width: 200px;
   padding: 0 12px;
   border-radius: 999px;
   font-size: 0.82rem;
   font-weight: 800;
   color: #0f2747;
   background: #7cc9ff;
+  border: none;
+  transition: transform 0.2s ease, box-shadow 0.2s ease, background 0.2s ease, color 0.2s ease;
 }
 
-.quote-chip--soft {
+button:hover:not(:disabled) {
+  transform: translateY(-1px);
+  box-shadow: 0 14px 28px rgba(124, 201, 255, 0.22);
+}
+
+button:disabled {
   color: #e7f0ff;
   background: rgba(255, 255, 255, 0.12);
+  box-shadow: none;
 }
 
-.quote-panel__note {
-  margin: 12px 0 0;
-  font-size: 0.9rem;
-  line-height: 1.5;
+.button-secondary {
+  color: #e7f0ff;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.12);
 }
 
 @media (max-width: 960px) {
